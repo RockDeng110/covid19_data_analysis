@@ -16,7 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
 ```
-
+## Data Import
 
 ```{r}
 url_in <- "https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/csse_covid_19_time_series/"
@@ -48,7 +48,7 @@ global_deaths <- read_csv(local_file_names[4])
 
 ```
 
-### Tidy the dataset
+## Tidy the dataset
 
 ```{r}
 global_cases_pivot <- global_cases %>%
@@ -91,13 +91,22 @@ us_cases_pivot <- us_cases %>%
     select(-c(Lat, Long_))
 
 us_deaths_pivot <- us_deaths %>%
-    pivot_longer(cols = -(UID:Combined_Key),
+    pivot_longer(cols = -(UID:Population),
                  names_to = "date",
                  values_to = "deaths") %>%
     select(Admin2:deaths) %>%
     mutate(date = mdy(date)) %>%
     select(-c(Lat, Long_))
 ```
+
+```{r}
+US <- us_cases_pivot %>%
+    full_join(us_deaths_pivot)
+
+US
+```
+
+* Add a column named Combined_Key which combined with province/state and country/region
 
 ```{r}
 global <- global %>%
@@ -107,16 +116,173 @@ global <- global %>%
           na.rm = TRUE,
           remove = FALSE)
 
+global
 ```
 
+* Add population into the global dataset
 ```{r}
+# import the population data
 uid <- read_csv("UID_ISO_FIPS_LookUp_Table.csv") %>%
     select(-c(Lat, Long_, Combined_Key, code3, iso2, iso3, Admin2))
-```
 
-```{r}
+# add the population data into the global dataset
 global_p <- global %>%
     left_join(uid, by=c("Province_State", "Country_Region")) %>%
     select(-c(UID, FIPS)) %>%
     select(Province_State, Country_Region, date, cases, deaths, Population, Combined_Key)
+
+global_p
+```
+
+
+## Data analysis and exploration
+
+* Checkout the data by each US states and the deaths per million in it.
+```{r}
+US_by_state <- US %>%
+    group_by(Province_State, Country_Region, date) %>%
+    summarize(cases = sum(cases), deaths = sum(deaths), Population = sum(Population)) %>%
+    mutate(deaths_per_mill = deaths * 1000000 / Population) %>%
+    select(Province_State, Country_Region, date, cases, deaths, deaths_per_mill, Population) %>%
+  ungroup()
+
+US_by_state
+```
+
+
+* Checkout the total deaths of US in each day.
+```{r}
+US_total <- US_by_state %>%
+    group_by(Country_Region, date) %>%
+    summarize(cases = sum(cases), deaths = sum(deaths), Population = sum(Population)) %>%
+    mutate(deaths_per_mill = deaths * 1000000 / Population) %>%
+    select(Country_Region, date, cases, deaths, deaths_per_mill, Population) %>%
+  ungroup()
+
+US_total
+```
+
+* Visualization for US total cases and deaths along with date
+```{r}
+US_total %>%
+    filter(cases > 0) %>%
+    ggplot(aes(x = date, y = cases)) +
+    geom_line(aes(color = "cases")) +
+    geom_point(aes(color = "cases")) +
+    geom_line(aes(y = deaths, color = "deaths")) +
+    geom_point(aes(y = deaths, color = "deaths")) + 
+    scale_y_log10() +
+    theme(legend.position = "bottom",
+          axis.text.x = element_text(angle = 90)) +
+    labs(title = "COVID19 in US", y = NULL)
+```
+
+* Visualization for New York
+```{r}
+state <- "New York"
+US_by_state %>%
+    filter(Province_State == state) %>%
+    filter(cases > 0) %>%
+    ggplot(aes(x = date, y = cases)) +
+    geom_line(aes(color = "cases")) +
+    geom_point(aes(color = "cases")) +
+    geom_line(aes(y = deaths, color = "deaths")) + 
+    geom_point(aes(y = deaths, color = "deaths")) +
+    scale_y_log10() +
+    theme(legend.position = "bottom",
+          axis.text.x = element_text(angle = 90)) +
+    labs(title = str_c("COVIDE19 in ", state), y = NULL)
+```
+
+* new cases and new deaths
+```{r}
+US_by_state_nc <- US_by_state %>%
+    mutate(new_cases = cases - lag(cases),
+           new_deaths = deaths - lag(deaths))
+US_by_state_nc
+
+US_total_nc <- US_total %>%
+    mutate(new_cases = cases - lag(cases),
+           new_deaths = deaths - lag(deaths))
+US_total_nc
+```
+visualize
+```{r}
+US_total_nc %>%
+    ggplot(aes(x = date, y = new_cases)) +
+    geom_line(aes(color = "new_cases")) +
+    geom_point(aes(color = "new_cases")) +
+    geom_line(aes(y = new_deaths, color = "new_deaths")) +
+    geom_point(aes(y = new_deaths, color = "new_deaths")) + 
+    scale_y_log10() +
+    theme(legend.position = "bottom",
+          axis.text.x = element_text(angle = 90)) +
+    labs(title = "COVID19 in US", y = NULL)
+```
+
+```{r}
+state <- "New York"
+US_by_state_nc %>%
+    filter(Province_State == state) %>%
+    filter(cases > 0) %>%
+    ggplot(aes(x = date, y = new_cases)) +
+    geom_line(aes(color = "new_cases")) +
+    geom_point(aes(color = "new_cases")) +
+    geom_line(aes(y = new_deaths, color = "new_deaths")) + 
+    geom_point(aes(y = new_deaths, color = "new_deaths")) +
+    scale_y_log10() +
+    theme(legend.position = "bottom",
+          axis.text.x = element_text(angle = 90)) +
+    labs(title = str_c("COVIDE19 in ", state), y = NULL)
+```
+
+* comparing states in the US
+```{r}
+US_state_totals <- US_by_state %>%
+    group_by(Province_State) %>%
+    summarize(deaths = max(deaths), 
+              cases = max(cases), 
+              population = max(Population), 
+              cases_per_thou = 1000 * cases / population, 
+              deaths_per_thou = 1000 * deaths / population) %>%
+    filter(cases > 0, population > 0)
+
+US_state_totals
+```
+
+* best states
+```{r}
+US_state_totals %>%
+    slice_min(deaths_per_thou, n = 10) %>%
+    select(deaths_per_thou, cases_per_thou, everything())
+
+```
+
+* worst states
+```{r}
+US_state_totals %>%
+    slice_max(deaths_per_thou, n = 10) %>%
+    select(deaths_per_thou, cases_per_thou, everything())
+```
+
+
+
+
+
+## Modeling
+```{r}
+mod <- lm(deaths_per_thou ~ cases_per_thou, data = US_state_totals)
+summary(mod)
+```
+
+
+```{r}
+#x_grid <- seq(1, 151)
+#new_df <- tibble(cases_per_thou = x_grid)
+
+US_tot_w_pred <- US_state_totals %>% mutate(pred = predict(mod))
+
+US_tot_w_pred %>% ggplot() + 
+    geom_point(aes(x = cases_per_thou, y = deaths_per_thou), color = "blue") +
+    geom_point(aes(x = cases_per_thou, y = pred), color = "red")
 ```
