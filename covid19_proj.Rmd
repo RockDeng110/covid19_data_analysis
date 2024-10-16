@@ -3,53 +3,78 @@ title: "covid19_proj"
 author: "RockDeng"
 date: "2024-10-09"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 # load libraries
 library(tidyverse)
 library(lubridate)
 ```
-## Data Import
+## Data Importing
 
-```{r}
-url_in <- "https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data/csse_covid_19_time_series/"
+#### Data source statement
+* All the dataset analized in this report are downloaded from https://github.com/CSSEGISandData/COVID-19/blob/master/csse_covid_19_data
+* Totally there are 5 csv files:
+  * time_series_covid19_confirmed_US.csv
+  * time_series_covid19_deaths_US.csv
+  * time_series_covid19_confirmed_global.csv
+  * time_series_covid19_deaths_global.csv
+  * UID_ISO_FIPS_LookUp_Table.csv
+* Why choose downloading those datasets instead of importing them directly from web.
+  * Because I'm based in China where usually failed to access the data from web in R
+  * As the COVID19 pandemic is over, I think those data will not get updated anymore and the data I downloaded will be up-to-date.
+  
+  
+#### Objective statment
+* Follow the instructions in the course of Data Science as a Field on the Cousera.org to learn how to tidy, visualize and analyze COVID19 data.
+* Only small modification between my version of processes and those mentioned in the course.
+* The biggest difference is that I got the complete version of dataset because the pandemic was over years ago. In contrast, the professor only got portion of the whole data when she recorded that course during the pandemic in 2021.
+* So even I almost copy the processes from the course, as I got more data, the results in my report should be more accurate. For example, we can only get the states in the US doing the best or the worst during the whole pandemic after the pandemic.
 
-file_names <- c("time_series_covid19_confirmed_US.csv",
-               "time_series_covid19_deaths_US.csv",
-               "time_series_covid19_confirmed_global.csv",
-               "time_series_covid19_deaths_global.csv")
 
-urls <- str_c(url_in, file_names)
+#### Import data and get some basic understanding
+```{r message=FALSE}
 
 local_file_names <- c("time_series_covid19_confirmed_US.csv",
                       "time_series_covid19_deaths_US.csv",
                       "time_series_covid19_confirmed_global.csv",
                       "time_series_covid19_deaths_global.csv")
 
-```
-
-```{r}
 us_cases <- read_csv(local_file_names[1])
 us_deaths <- read_csv(local_file_names[2])
 global_cases <- read_csv(local_file_names[3])
 global_deaths <- read_csv(local_file_names[4])
 
-#us_cases <- read_csv(urls[1])
-#us_deaths <- read_csv(urls[2])
-#global_cases <- read_csv(urls[3])
-#global_deaths <- read_csv(urls[4])
-
 ```
-
+```{r}
+get_simple_basic_info <- function(df){
+  dim(df)
+  head(df)
+}
+get_simple_basic_info(us_cases)
+get_simple_basic_info(us_deaths)
+get_simple_basic_info(global_cases)
+get_simple_basic_info(global_deaths)
+```
 ## Tidy the dataset
+### Why Tidying Data is Important:
+- It simplifies data analysis by ensuring that every observation is easily accessible.
+- It improves compatibility with data analysis tools and libraries, like Python’s Pandas or R’s Tidyverse, which often expect tidy data formats.
+- It makes data easier to visualize and interpret.
 
+### key principles of tidy data:
+1. **Each variable forms a column**: Every column in the dataset should represent a distinct variable, and each variable should contain all its values for the observations in the dataset.
+2. **Each observation forms a row**: Each row should represent a single observation or instance of the dataset. This makes it easy to track and manipulate individual cases or events.
+3. **Each type of observational unit forms a table**: When dealing with data that involves multiple types of units (e.g., individuals, organizations, etc.), it’s important to keep separate tables for different units.
+
+### Tidying processes
+* pivot the global datasets
 ```{r}
 global_cases_pivot <- global_cases %>%
   pivot_longer(cols = -c('Province/State',
@@ -69,11 +94,9 @@ global_deaths_pivot <- global_deaths %>%
                values_to = "deaths") %>%
   select(-c(Lat,Long))
 
-
-
-
 ```
-```{r}
+* Combine global cases and deaths into one tibble and change to string type of date to inner date type.
+```{r message=FALSE}
 global <- global_cases_pivot %>%
     full_join(global_deaths_pivot) %>%
     rename(Country_Region = "Country/Region",
@@ -81,6 +104,7 @@ global <- global_cases_pivot %>%
     mutate(date = mdy(date))
 ```
 
+* Pivot the US cases and deaths
 ```{r}
 us_cases_pivot <- us_cases %>%
     pivot_longer(cols = -(UID:Combined_Key),
@@ -99,7 +123,8 @@ us_deaths_pivot <- us_deaths %>%
     select(-c(Lat, Long_))
 ```
 
-```{r}
+* Combine US cases and deaths into one tibble
+```{r message=FALSE}
 US <- us_cases_pivot %>%
     full_join(us_deaths_pivot)
 
@@ -120,7 +145,7 @@ global
 ```
 
 * Add population into the global dataset
-```{r}
+```{r message=FALSE}
 # import the population data
 uid <- read_csv("UID_ISO_FIPS_LookUp_Table.csv") %>%
     select(-c(Lat, Long_, Combined_Key, code3, iso2, iso3, Admin2))
@@ -138,7 +163,7 @@ global_p
 ## Data analysis and exploration
 
 * Checkout the data by each US states and the deaths per million in it.
-```{r}
+```{r message=FALSE}
 US_by_state <- US %>%
     group_by(Province_State, Country_Region, date) %>%
     summarize(cases = sum(cases), deaths = sum(deaths), Population = sum(Population)) %>%
@@ -151,7 +176,7 @@ US_by_state
 
 
 * Checkout the total deaths of US in each day.
-```{r}
+```{r message=FALSE}
 US_total <- US_by_state %>%
     group_by(Country_Region, date) %>%
     summarize(cases = sum(cases), deaths = sum(deaths), Population = sum(Population)) %>%
@@ -177,8 +202,8 @@ US_total %>%
     labs(title = "COVID19 in US", y = NULL)
 ```
 
-* Visualization for New York
-```{r}
+* Visualization of total cases and total deaths in New York
+```{r warning=FALSE}
 state <- "New York"
 US_by_state %>%
     filter(Province_State == state) %>%
@@ -194,7 +219,7 @@ US_by_state %>%
     labs(title = str_c("COVIDE19 in ", state), y = NULL)
 ```
 
-* new cases and new deaths
+* Add new variables for new cases and new deaths in every day
 ```{r}
 US_by_state_nc <- US_by_state %>%
     mutate(new_cases = cases - lag(cases),
@@ -206,7 +231,11 @@ US_total_nc <- US_total %>%
            new_deaths = deaths - lag(deaths))
 US_total_nc
 ```
-visualize
+* visualize new cases and new deaths in the US dataset
+```{r}
+rows_with_na_age_or_height <- US_total_nc[is.na(US_total_nc$new_cases) | is.na(US_total_nc$new_deaths), ]
+print(rows_with_na_age_or_height)
+```
 ```{r}
 US_total_nc %>%
     ggplot(aes(x = date, y = new_cases)) +
@@ -220,6 +249,16 @@ US_total_nc %>%
     labs(title = "COVID19 in US", y = NULL)
 ```
 
+* visualize new cases and new deaths in New York
+```{r}
+rows_with_na_age_or_height <- US_by_state_nc[is.na(US_by_state_nc$new_cases) | is.na(US_by_state_nc$new_deaths), ]
+print(rows_with_na_age_or_height)
+```
+```{r}
+state <- "New York"
+US_by_state_nc %>%
+    filter(Province_State == state)
+```
 ```{r}
 state <- "New York"
 US_by_state_nc %>%
@@ -236,7 +275,7 @@ US_by_state_nc %>%
     labs(title = str_c("COVIDE19 in ", state), y = NULL)
 ```
 
-* comparing states in the US
+* Find the best states
 ```{r}
 US_state_totals <- US_by_state %>%
     group_by(Province_State) %>%
@@ -249,8 +288,6 @@ US_state_totals <- US_by_state %>%
 
 US_state_totals
 ```
-
-* best states
 ```{r}
 US_state_totals %>%
     slice_min(deaths_per_thou, n = 10) %>%
@@ -258,7 +295,7 @@ US_state_totals %>%
 
 ```
 
-* worst states
+* Find the worst states
 ```{r}
 US_state_totals %>%
     slice_max(deaths_per_thou, n = 10) %>%
@@ -270,6 +307,8 @@ US_state_totals %>%
 
 
 ## Modeling
+* Build a simple model with only one independent variable.
+* Try to use cases to predict deaths.
 ```{r}
 mod <- lm(deaths_per_thou ~ cases_per_thou, data = US_state_totals)
 summary(mod)
@@ -277,9 +316,6 @@ summary(mod)
 
 
 ```{r}
-#x_grid <- seq(1, 151)
-#new_df <- tibble(cases_per_thou = x_grid)
-
 US_tot_w_pred <- US_state_totals %>% mutate(pred = predict(mod))
 
 US_tot_w_pred %>% ggplot() + 
