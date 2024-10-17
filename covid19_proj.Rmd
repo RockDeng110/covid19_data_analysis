@@ -33,7 +33,7 @@ library(lubridate)
   
 #### Objective statment
 * Follow the instructions in the course of Data Science as a Field on the Cousera.org to learn how to tidy, visualize and analyze COVID19 data.
-* Only small modification between my version of processes and those mentioned in the course.
+* Besides the comparison between China and the US, only small modification between my version of processes and those mentioned in the course.
 * The biggest difference is that I got the complete version of dataset because the pandemic was over years ago. In contrast, the professor only got portion of the whole data when she recorded that course during the pandemic in 2021.
 * So even I almost copy the processes from the course, as I got more data, the results in my report should be more accurate. For example, we can only get the states in the US doing the best or the worst during the whole pandemic after the pandemic.
 
@@ -74,7 +74,7 @@ get_simple_basic_info(global_deaths)
 3. **Each type of observational unit forms a table**: When dealing with data that involves multiple types of units (e.g., individuals, organizations, etc.), it’s important to keep separate tables for different units.
 
 ### Tidying processes
-* pivot the global datasets
+#### pivot the global datasets
 ```{r}
 global_cases_pivot <- global_cases %>%
   pivot_longer(cols = -c('Province/State',
@@ -95,7 +95,7 @@ global_deaths_pivot <- global_deaths %>%
   select(-c(Lat,Long))
 
 ```
-* Combine global cases and deaths into one tibble and change to string type of date to inner date type.
+#### Combine global cases and deaths into one tibble and change to string type of date to inner date type.
 ```{r message=FALSE}
 global <- global_cases_pivot %>%
     full_join(global_deaths_pivot) %>%
@@ -104,7 +104,7 @@ global <- global_cases_pivot %>%
     mutate(date = mdy(date))
 ```
 
-* Pivot the US cases and deaths
+#### Pivot the US cases and deaths
 ```{r}
 us_cases_pivot <- us_cases %>%
     pivot_longer(cols = -(UID:Combined_Key),
@@ -123,7 +123,7 @@ us_deaths_pivot <- us_deaths %>%
     select(-c(Lat, Long_))
 ```
 
-* Combine US cases and deaths into one tibble
+#### Combine US cases and deaths into one tibble
 ```{r message=FALSE}
 US <- us_cases_pivot %>%
     full_join(us_deaths_pivot)
@@ -131,7 +131,7 @@ US <- us_cases_pivot %>%
 US
 ```
 
-* Add a column named Combined_Key which combined with province/state and country/region
+#### Add a column named Combined_Key which combined with province/state and country/region
 
 ```{r}
 global <- global %>%
@@ -144,7 +144,7 @@ global <- global %>%
 global
 ```
 
-* Add population into the global dataset
+#### Add population into the global dataset
 ```{r message=FALSE}
 # import the population data
 uid <- read_csv("UID_ISO_FIPS_LookUp_Table.csv") %>%
@@ -162,7 +162,7 @@ global_p
 
 ## Data analysis and exploration
 
-* Checkout the data by each US states and the deaths per million in it.
+### Checkout the data by each US states and the deaths per million in it.
 ```{r message=FALSE}
 US_by_state <- US %>%
     group_by(Province_State, Country_Region, date) %>%
@@ -175,7 +175,7 @@ US_by_state
 ```
 
 
-* Checkout the total deaths of US in each day.
+### Checkout the total deaths of US in each day.
 ```{r message=FALSE}
 US_total <- US_by_state %>%
     group_by(Country_Region, date) %>%
@@ -187,7 +187,7 @@ US_total <- US_by_state %>%
 US_total
 ```
 
-* Visualization for US total cases and deaths along with date
+### Visualization for US total cases and deaths along with date
 ```{r}
 US_total %>%
     filter(cases > 0) %>%
@@ -202,7 +202,7 @@ US_total %>%
     labs(title = "COVID19 in US", y = NULL)
 ```
 
-* Visualization of total cases and total deaths in New York
+### Visualization of total cases and total deaths in New York
 ```{r warning=FALSE}
 state <- "New York"
 US_by_state %>%
@@ -219,7 +219,7 @@ US_by_state %>%
     labs(title = str_c("COVIDE19 in ", state), y = NULL)
 ```
 
-* Add new variables for new cases and new deaths in every day
+### Add new variables for new cases and new deaths in every day
 ```{r}
 US_by_state_nc <- US_by_state %>%
     mutate(new_cases = cases - lag(cases),
@@ -231,7 +231,7 @@ US_total_nc <- US_total %>%
            new_deaths = deaths - lag(deaths))
 US_total_nc
 ```
-* visualize new cases and new deaths in the US dataset
+### visualize new cases and new deaths in the US dataset
 ```{r}
 rows_with_na_age_or_height <- US_total_nc[is.na(US_total_nc$new_cases) | is.na(US_total_nc$new_deaths), ]
 print(rows_with_na_age_or_height)
@@ -249,7 +249,7 @@ US_total_nc %>%
     labs(title = "COVID19 in US", y = NULL)
 ```
 
-* visualize new cases and new deaths in New York
+### visualize new cases and new deaths in New York
 ```{r}
 rows_with_na_age_or_height <- US_by_state_nc[is.na(US_by_state_nc$new_cases) | is.na(US_by_state_nc$new_deaths), ]
 print(rows_with_na_age_or_height)
@@ -275,7 +275,7 @@ US_by_state_nc %>%
     labs(title = str_c("COVIDE19 in ", state), y = NULL)
 ```
 
-* Find the best states
+### Find the best states in the US
 ```{r}
 US_state_totals <- US_by_state %>%
     group_by(Province_State) %>%
@@ -295,13 +295,93 @@ US_state_totals %>%
 
 ```
 
-* Find the worst states
+### Find the worst states in the US
 ```{r}
 US_state_totals %>%
     slice_max(deaths_per_thou, n = 10) %>%
     select(deaths_per_thou, cases_per_thou, everything())
 ```
 
+### China Vs. US
+```{r warning=FALSE}
+US_from_global <- global_p %>%
+    filter(Country_Region == "US")
+#US_from_global
+
+China_from_global <- global_p %>%
+    filter(Country_Region == "China") %>%
+    group_by(Country_Region, date) %>%
+    summarize(cases = sum(cases), deaths = sum(deaths)) 
+#China_from_global
+
+
+# compare cases over time
+ggplot() +
+  # Adjust line size for better visibility
+  geom_line(data = China_from_global, aes(x = date, y = cases, color = "China"), size = 1.2) +
+  geom_line(data = US_from_global, aes(x = date, y = cases, color = "US"), size = 1.2) +
+  
+  # Use a more appealing color palette
+  scale_color_manual(values = c("China" = "firebrick", "US" = "steelblue")) +
+  
+  # Apply log scale for y-axis and adjust axis labels for clarity
+  scale_y_log10(labels = scales::comma) +
+  
+  # Improve overall theme aesthetics
+  theme_minimal(base_size = 15) +
+  
+  # Make sure the legend is positioned well and easy to read
+  theme(legend.position = "bottom",
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        axis.text.x = element_text(angle = 90, hjust = 1),
+        plot.title = element_text(face = "bold", size = 18),
+        plot.subtitle = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)) +
+  
+  # Add informative title, subtitle, and captions
+  labs(title = "COVID-19 Cases: China vs. US",
+       subtitle = "Comparing deaths over time (Logarithmic Scale)",
+       x = "Date",
+       y = "Number of Cases (Log Scale)",
+       color = "Country",
+       caption = "Data Source: Global COVID-19 Dataset")
+
+# compare death over time
+ggplot() +
+  # Adjust line size for better visibility
+  geom_line(data = China_from_global, aes(x = date, y = deaths, color = "China"), size = 1.2) +
+  geom_line(data = US_from_global, aes(x = date, y = deaths, color = "US"), size = 1.2) +
+  
+  # Use a more appealing color palette
+  scale_color_manual(values = c("China" = "firebrick", "US" = "steelblue")) +
+  
+  # Apply log scale for y-axis and adjust axis labels for clarity
+  scale_y_log10(labels = scales::comma) +
+  
+  # Improve overall theme aesthetics
+  theme_minimal(base_size = 15) +
+  
+  # Make sure the legend is positioned well and easy to read
+  theme(legend.position = "bottom",
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 10),
+        axis.text.x = element_text(angle = 90, hjust = 1),
+        plot.title = element_text(face = "bold", size = 18),
+        plot.subtitle = element_text(size = 12),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14)) +
+  
+  # Add informative title, subtitle, and captions
+  labs(title = "COVID-19 Deaths: China vs. US",
+       subtitle = "Comparing deaths over time (Logarithmic Scale)",
+       x = "Date",
+       y = "Number of Deaths (Log Scale)",
+       color = "Country",
+       caption = "Data Source: Global COVID-19 Dataset")
+
+```
 
 
 
@@ -322,3 +402,19 @@ US_tot_w_pred %>% ggplot() +
     geom_point(aes(x = cases_per_thou, y = deaths_per_thou), color = "blue") +
     geom_point(aes(x = cases_per_thou, y = pred), color = "red")
 ```
+
+
+## Conclusion
+At the beginning, the number of cases and deaths rises rapidly no matter in New York, the US or China. After a while, the methods humans deal with the virus takes effect, and the rising curve flattens until the epidemic ends.
+
+In the comparison between COVID-19 deaths in China and the US, as visualized in the report, demonstrates significant differences in the trajectory of fatalities between the two nations. The US experienced a higher and more prolonged surge in deaths compared to China. This contrast may be attributed to differences in public health policies, healthcare capacity, and cases/deaths collection. 
+
+### **Possible Sources of Bias:**
+1. **Data Collection Differences**: The method and accuracy of data collection vary by country. China and the US may have different definitions of COVID-19 deaths, underreporting issues, or delays in data updates, leading to inconsistencies in the comparison.
+2. **Government Policies**: Different approaches to lockdowns, testing, and reporting may bias the data. For instance, some areas may have experienced delays in implementing restrictions, affecting the death toll.
+3. **Healthcare System Differences**: The availability and quality of healthcare services in China and the US are vastly different, which can influence the fatality rates during the pandemic.
+
+### **Future Work:**
+1. **Detailed Policy Impact Analysis**: Future research should focus on assessing the specific public health interventions (such as lockdowns, mask mandates, and vaccination rollouts) in both countries and how they influenced the outcomes.
+2. **Sub-National Analysis**: Breaking down the data to explore variations within regions or states (e.g., by state in the US or by province in China) would provide deeper insights into how local measures impacted death rates.
+3. **Incorporation of Vaccination Data**: Including vaccination rates over time and their correlation with changes in death rates could reveal the effectiveness of vaccines in curbing the pandemic in each country.
